@@ -8,12 +8,19 @@ import numpy as np
 import time
 from collections import deque
 import datetime
+import mediapipe as mp
+
+mp_face_detection = mp.solutions.face_detection
+mp_face_mesh = mp.solutions.face_mesh
+
+face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5)
 import pyautogui
 
 
 # Initialize dlib face detector and facial landmarks predictor
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks_GTX.dat")
+# detector = dlib.get_frontal_face_detector()
+# predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks_GTX.dat")
 
 # Initialize parameters
 time_interval = 0.30  # Time window for average vector calculation in seconds
@@ -49,93 +56,89 @@ def determine_direction(vector):
     return "Center"
 
 def process_frame(frame, previous_nose):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Convert the frame to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     global last_trigger_time
 
-    # Detect faces in the grayscale frame
-    rects = detector(gray, 0)
+    # Detect faces in the frame
+    face_detection_results = face_detection.process(rgb_frame)
 
-    for rect in rects:
-        # Get the facial landmarks
-        shape = predictor(gray, rect)
-        shape = face_utils.shape_to_np(shape)
+    if face_detection_results.detections:
+        for detection in face_detection_results.detections:
+            bboxC = detection.location_data.relative_bounding_box
+            h, w, _ = frame.shape
+            x, y, width, height = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
+            cv2.rectangle(frame, (x, y), (x + width, y + height), (255, 0, 0), 2)  # Draw bounding box
 
-        # Draw the landmarks
-        for (x, y) in shape:
-            cv2.circle(frame, (x, y), 1, (0, 255, 0), -1)  # Green circles for landmarks
+            # Get facial landmarks using FaceMesh
+            mesh_results = face_mesh.process(rgb_frame)
+            if mesh_results.multi_face_landmarks:
+                # Access the nose landmark (index 1 for the tip of the nose)
+                nose = mesh_results.multi_face_landmarks[0].landmark[1]
 
-        # Track the nose (landmark 30)
-        nose = shape[30]
-        
-        if previous_nose is not None:
-            current_time = time.time()
-            # Compute the movement vector
-            movement_vector = np.array(nose) - np.array(previous_nose)
-            current_time = time.time()
-            vector_magnitude_value = vector_magnitude(movement_vector)
+                # Scale the landmark position to the frame size
+                nose_x = int(nose.x * w)
+                nose_y = int(nose.y * h)
 
-            # Add current vector and timestamp to the deque
-            vector_window.append((current_time, movement_vector))
+                if previous_nose is not None:
+                    # Compute the movement vector
+                    movement_vector = np.array([nose_x, nose_y]) - np.array(previous_nose)
+                    current_time = time.time()
+                    vector_magnitude_value = vector_magnitude(movement_vector)
 
-            # Clean old vectors
-            clean_old_vectors(current_time)
+                    # Add current vector and timestamp to the deque
+                    vector_window.append((current_time, movement_vector))
 
-            # Compute average vector over the time window
-            avg_vector = average_vector([vec for _, vec in vector_window])
-            avg_magnitude = vector_magnitude(avg_vector)
+                    # Clean old vectors
+                    clean_old_vectors(current_time)
 
-            # Draw movement vector
-            start_point = (previous_nose[0], previous_nose[1])
-            end_point = (nose[0], nose[1])
-            cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Red arrow for movement
+                    # Compute average vector over the time window
+                    avg_vector = average_vector([vec for _, vec in vector_window])
+                    avg_magnitude = vector_magnitude(avg_vector)
 
-            # Determine direction based on average vector
-            direction = determine_direction(avg_vector)
+                    # Draw movement vector
+                    start_point = (previous_nose[0], previous_nose[1])
+                    end_point = (nose_x, nose_y)
+                    cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Red arrow for movement
 
-            # Print direction if the average magnitude exceeds the threshold
-            if avg_magnitude > magnitude_threshold and (current_time - last_trigger_time) > action_cooldown:
-                print(avg_vector[0])
-                print(avg_vector[1])
-                if direction == "Left":
-                    print("Trigger Copy (Ctrl/Command + C)")
-                    pyautogui.hotkey('command', 'c')
-                elif direction == 'Right':
-                    print("Trigger Paste (Command + V)")
-                    pyautogui.hotkey('command', 'v')
-                elif direction == 'Up':
-                    print("Trigger Highlight All (Command + A)")
-                    pyautogui.hotkey('command', 'a')
-                elif direction == "Down":
-                    print("Trigger Undo(Command + z)")
-                    pyautogui.hotkey('command', 'z')
-                
-                print(f"Detected significant movement: {direction}, Average Vector: {avg_vector}")
-                last_trigger_time = current_time
+                    # Determine direction based on average vector
+                    direction = determine_direction(avg_vector)
+
+                    # Print direction if the average magnitude exceeds the threshold
+                    if avg_magnitude > magnitude_threshold and (current_time - last_trigger_time) > action_cooldown:
+                        print(avg_vector[0])
+                        print(avg_vector[1])
+                        if direction == "Left":
+                            print("Trigger Copy (Ctrl/Command + C)")
+                            pyautogui.hotkey('command', 'c')
+                        elif direction == 'Right':
+                            print("Trigger Paste (Command + V)")
+                            pyautogui.hotkey('command', 'v')
+                        elif direction == 'Up':
+                            print("Trigger Highlight All (Command + A)")
+                            pyautogui.hotkey('command', 'a')
+                        elif direction == "Down":
+                            print("Trigger Undo(Command + z)")
+                            pyautogui.hotkey('command', 'z')
+                        last_trigger_time = current_time
 
 
-            # Debugging: Print vectors and times to a file
-            with open('movement_log.txt', 'a') as log_file:
-                log_file.write(f"{current_time}, {movement_vector}, {vector_magnitude_value}, {avg_vector}, {avg_magnitude}, {direction}\n")
+                    # Debugging: Print vectors and times to a file
+                    with open('movement_log.txt', 'a') as log_file:
+                        log_file.write(f"{current_time}, {movement_vector}, {vector_magnitude_value}, {avg_vector}, {avg_magnitude}, {direction}\n")
 
-        # Update previous nose position
-        previous_nose = nose
+                # Update previous nose position
+                previous_nose = [nose_x, nose_y]
 
     return previous_nose
-
 def main():
-    # Start the video stream
-    time = datetime.datetime.now()
     cap = cv2.VideoCapture(0)
-    # print("Time diff: ", datetime.datetime.now() - time)
-    # Set resolution to 1280x720 (HD) or 1920x1080 (Full HD)
-    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-
     previous_nose = None
 
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
+        
         # Process the frame
         if ret:
             frame = imutils.resize(frame, width=720)
