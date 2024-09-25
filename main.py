@@ -17,8 +17,11 @@ predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks_GTX.dat")
 
 # Initialize parameters
 time_interval = 0.30  # Time window for average vector calculation in seconds
-magnitude_threshold = 20.0  # Threshold magnitude to trigger action
+magnitude_threshold = 8.0  # Threshold magnitude to trigger action
 vector_window = deque()  # Store vectors with timestamps
+last_trigger_time = 0
+action_cooldown = 1.0  # Cooldown period of 1 second
+
 
 def vector_magnitude(vector):
     return np.sqrt(vector[0] ** 2 + vector[1] ** 2)
@@ -33,14 +36,21 @@ def clean_old_vectors(current_time):
         vector_window.popleft()
 
 def determine_direction(vector):
-    if vector[0] > 0:
-        return "Right"
-    elif vector[0] < 0:
+    if(abs(vector[0]) < abs(vector[1])):
+        if(vector[1] < 0):
+            return "Up"
+        elif(vector[1] > 0):
+            return "Down"
+    elif vector[0] > 0:
         return "Left"
+    elif vector[0] < 0:
+        return "Right"
+    
     return "Center"
 
 def process_frame(frame, previous_nose):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    global last_trigger_time
 
     # Detect faces in the grayscale frame
     rects = detector(gray, 0)
@@ -58,6 +68,7 @@ def process_frame(frame, previous_nose):
         nose = shape[30]
         
         if previous_nose is not None:
+            current_time = time.time()
             # Compute the movement vector
             movement_vector = np.array(nose) - np.array(previous_nose)
             current_time = time.time()
@@ -82,14 +93,25 @@ def process_frame(frame, previous_nose):
             direction = determine_direction(avg_vector)
 
             # Print direction if the average magnitude exceeds the threshold
-            if avg_magnitude > magnitude_threshold:
-                if direction == "Right":
+            if avg_magnitude > magnitude_threshold and (current_time - last_trigger_time) > action_cooldown:
+                print(avg_vector[0])
+                print(avg_vector[1])
+                if direction == "Left":
                     print("Trigger Copy (Ctrl/Command + C)")
                     pyautogui.hotkey('command', 'c')
-                else:
+                elif direction == 'Right':
                     print("Trigger Paste (Command + V)")
                     pyautogui.hotkey('command', 'v')
+                elif direction == 'Up':
+                    print("Trigger Highlight All (Command + A)")
+                    pyautogui.hotkey('command', 'a')
+                elif direction == "Down":
+                    print("Trigger Undo(Command + z)")
+                    pyautogui.hotkey('command', 'z')
+                
                 print(f"Detected significant movement: {direction}, Average Vector: {avg_vector}")
+                last_trigger_time = current_time
+
 
             # Debugging: Print vectors and times to a file
             with open('movement_log.txt', 'a') as log_file:
