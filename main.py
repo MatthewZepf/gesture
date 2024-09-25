@@ -8,6 +8,8 @@ import numpy as np
 import time
 from collections import deque
 import datetime
+import pyautogui
+
 
 # Initialize dlib face detector and facial landmarks predictor
 detector = dlib.get_frontal_face_detector()
@@ -81,6 +83,12 @@ def process_frame(frame, previous_nose):
 
             # Print direction if the average magnitude exceeds the threshold
             if avg_magnitude > magnitude_threshold:
+                if direction == "Right":
+                    print("Trigger Copy (Ctrl/Command + C)")
+                    pyautogui.hotkey('command', 'c')
+                else:
+                    print("Trigger Paste (Command + V)")
+                    pyautogui.hotkey('command', 'v')
                 print(f"Detected significant movement: {direction}, Average Vector: {avg_vector}")
 
             # Debugging: Print vectors and times to a file
