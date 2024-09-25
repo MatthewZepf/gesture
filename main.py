@@ -1,3 +1,5 @@
+import os
+os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 import cv2
 import dlib
 import imutils
@@ -5,6 +7,7 @@ from imutils import face_utils
 import numpy as np
 import time
 from collections import deque
+import datetime
 
 # Initialize dlib face detector and facial landmarks predictor
 detector = dlib.get_frontal_face_detector()
@@ -91,24 +94,25 @@ def process_frame(frame, previous_nose):
 
 def main():
     # Start the video stream
-    cap = cv2.VideoCapture(0, cv2.CAP_ANY)
-
+    time = datetime.datetime.now()
+    cap = cv2.VideoCapture(0)
+    # print("Time diff: ", datetime.datetime.now() - time)
     # Set resolution to 1280x720 (HD) or 1920x1080 (Full HD)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     previous_nose = None
 
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
-        frame = imutils.resize(frame, width=600)
-
         # Process the frame
-        previous_nose = process_frame(frame, previous_nose)
+        if ret:
+            frame = imutils.resize(frame, width=720)
+            previous_nose = process_frame(frame, previous_nose)
 
-        # Display the resulting frame
-        cv2.imshow("Head Movement Detection", frame)
+            # Display the resulting frame
+            cv2.imshow("Head Movement Detection", frame)
 
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
