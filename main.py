@@ -14,7 +14,7 @@ mp_face_detection = mp.solutions.face_detection
 mp_face_mesh = mp.solutions.face_mesh
 
 face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5)
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 # Initialize dlib face detector and facial landmarks predictor
 # detector = dlib.get_frontal_face_detector()
@@ -22,7 +22,7 @@ face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_
 
 # Initialize parameters
 time_interval = 0.30  # Time window for average vector calculation in seconds
-magnitude_threshold = 20.0  # Threshold magnitude to trigger action
+magnitude_threshold = 0.01  # Threshold magnitude to trigger action
 vector_window = deque()  # Store vectors with timestamps
 
 def vector_magnitude(vector):
@@ -44,11 +44,62 @@ def determine_direction(vector):
         return "Left"
     return "Center"
 
-def process_frame(frame, previous_nose):
+def detect_and_draw_landmarks(frame, mesh_results, predictor):
+    # return landmarks if detected, otherwise return None, also draw the landmarks on the frame
+    if mesh_results.multi_face_landmarks:
+        for face_landmarks in mesh_results.multi_face_landmarks:
+            for i, landmark in enumerate(face_landmarks.landmark):
+                h, w, _ = frame.shape
+                x, y = int(landmark.x * w), int(landmark.y * h)
+                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
+    return mesh_results.multi_face_landmarks
+
+def calculate_movement(landmarks, previous_landmarks, current_time, frame):
+    # Calculate the movement vector based on the landmarks
+    # Extract nose coordinates from landmarks
+    # print(type(landmarks))
+    # print(landmarks.landmark[1])
+    # print(landmarks)
+    nose_x, nose_y = landmarks.landmark[1].x, landmarks.landmark[1].y
+    previous_nose_x, previous_nose_y = previous_landmarks.landmark[1].x, previous_landmarks.landmark[1].y
+
+    # Calculate movement vector from previous nose coordinates
+    movement_vector = (nose_x - previous_nose_x, nose_y - previous_nose_y)
+
+    # Calculate vector magnitude
+    vector_magnitude_value = vector_magnitude(movement_vector)
+
+    # Add current vector and timestamp to the deque
+    vector_window.append((current_time, movement_vector))
+
+    # Clean old vectors
+    clean_old_vectors(current_time)
+
+    # Compute average vector over the time window
+    avg_vector = average_vector([vec for _, vec in vector_window])
+    avg_magnitude = vector_magnitude(avg_vector)
+
+    # Draw movement vector
+    # Get the frame dimensions
+    h, w, _ = frame.shape
+
+    # Convert normalized coordinates to actual pixel coordinates
+    start_point = (int(previous_nose_x * w), int(previous_nose_y * h))
+    end_point = (int(nose_x * w), int(nose_y * h))
+    cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Red arrow for movement
+
+    # Determine direction based on average vector
+    direction = determine_direction(avg_vector)
+
+    # Print direction if the average magnitude exceeds the threshold
+    if avg_magnitude > magnitude_threshold:
+        print(f"Detected significant movement: {direction}, Average Vector: {avg_vector}")
+
+def process_frame(frame, previous_landmarks):
     # Convert the frame to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Detect faces in the frame
+    # Detect faces in the frame using FaceDetection
     face_detection_results = face_detection.process(rgb_frame)
 
     if face_detection_results.detections:
@@ -59,54 +110,19 @@ def process_frame(frame, previous_nose):
             cv2.rectangle(frame, (x, y), (x + width, y + height), (255, 0, 0), 2)  # Draw bounding box
 
             # Get facial landmarks using FaceMesh
-            mesh_results = face_mesh.process(rgb_frame)
-            if mesh_results.multi_face_landmarks:
-                # Access the nose landmark (index 1 for the tip of the nose)
-                nose = mesh_results.multi_face_landmarks[0].landmark[1]
+            landmarks = detect_and_draw_landmarks(frame, face_mesh.process(rgb_frame), None)
+            landmarks = landmarks[0] if landmarks else None
 
-                # Scale the landmark position to the frame size
-                nose_x = int(nose.x * w)
-                nose_y = int(nose.y * h)
+            # Calculate movement vector based on the landmarks
+            if previous_landmarks and landmarks:
+                calculate_movement(landmarks, previous_landmarks, time.time(), frame)
 
-                if previous_nose is not None:
-                    # Compute the movement vector
-                    movement_vector = np.array([nose_x, nose_y]) - np.array(previous_nose)
-                    current_time = time.time()
-                    vector_magnitude_value = vector_magnitude(movement_vector)
+    # if landmarks not none, return landmarks, otherwise return previous_landmarks
+    return landmarks if landmarks else previous_landmarks
 
-                    # Add current vector and timestamp to the deque
-                    vector_window.append((current_time, movement_vector))
-
-                    # Clean old vectors
-                    clean_old_vectors(current_time)
-
-                    # Compute average vector over the time window
-                    avg_vector = average_vector([vec for _, vec in vector_window])
-                    avg_magnitude = vector_magnitude(avg_vector)
-
-                    # Draw movement vector
-                    start_point = (previous_nose[0], previous_nose[1])
-                    end_point = (nose_x, nose_y)
-                    cv2.arrowedLine(frame, start_point, end_point, (255, 0, 0), 2)  # Red arrow for movement
-
-                    # Determine direction based on average vector
-                    direction = determine_direction(avg_vector)
-
-                    # Print direction if the average magnitude exceeds the threshold
-                    if avg_magnitude > magnitude_threshold:
-                        print(f"Detected significant movement: {direction}, Average Vector: {avg_vector}")
-
-                    # Debugging: Print vectors and times to a file
-                    with open('movement_log.txt', 'a') as log_file:
-                        log_file.write(f"{current_time}, {movement_vector}, {vector_magnitude_value}, {avg_vector}, {avg_magnitude}, {direction}\n")
-
-                # Update previous nose position
-                previous_nose = [nose_x, nose_y]
-
-    return previous_nose
 def main():
     cap = cv2.VideoCapture(0)
-    previous_nose = None
+    previous_landmarks = None
 
     while True:
         # Capture frame-by-frame
@@ -115,7 +131,7 @@ def main():
         # Process the frame
         if ret:
             frame = imutils.resize(frame, width=720)
-            previous_nose = process_frame(frame, previous_nose)
+            previous_landmarks = process_frame(frame, previous_landmarks)
 
             # Display the resulting frame
             cv2.imshow("Head Movement Detection", frame)
