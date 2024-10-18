@@ -1,34 +1,27 @@
 import os
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 import cv2
-import dlib
 import imutils
 from imutils import face_utils
 import numpy as np
 import time
 from collections import deque
-import datetime
 import mediapipe as mp
+import pyautogui
 
+# Initialize parameters
 mp_face_detection = mp.solutions.face_detection
 mp_face_mesh = mp.solutions.face_mesh
 
 face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
-import pyautogui
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False,
+ max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-
-# Initialize dlib face detector and facial landmarks predictor
-# detector = dlib.get_frontal_face_detector()
-# predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks_GTX.dat")
-
-# Initialize parameters
 time_interval = 0.30  # Time window for average vector calculation in seconds
 magnitude_threshold = 0.01  # Threshold magnitude to trigger action
 vector_window = deque()  # Store vectors with timestamps
 last_trigger_time = 0
-action_cooldown = 1.0  # Cooldown period of 1 second
-
+action_cooldown = 0.5  # Cooldown period of 1 second
 
 def vector_magnitude(vector):
     return np.sqrt(vector[0] ** 2 + vector[1] ** 2)
@@ -68,18 +61,13 @@ def detect_and_draw_landmarks(frame, mesh_results, predictor):
 def calculate_movement(landmarks, previous_landmarks, current_time, frame):
     # Calculate the movement vector based on the landmarks
     # Extract nose coordinates from landmarks
-    # print(type(landmarks))
-    # print(landmarks.landmark[1])
-    # print(landmarks)
+
     global last_trigger_time
     nose_x, nose_y = landmarks.landmark[1].x, landmarks.landmark[1].y
     previous_nose_x, previous_nose_y = previous_landmarks.landmark[1].x, previous_landmarks.landmark[1].y
 
     # Calculate movement vector from previous nose coordinates
     movement_vector = (nose_x - previous_nose_x, nose_y - previous_nose_y)
-
-    # Calculate vector magnitude
-    vector_magnitude_value = vector_magnitude(movement_vector)
 
     # Add current vector and timestamp to the deque
     vector_window.append((current_time, movement_vector))
@@ -107,17 +95,13 @@ def calculate_movement(landmarks, previous_landmarks, current_time, frame):
         print(avg_vector[0])
         print(avg_vector[1])
         if direction == "Left":
-            print("Trigger Copy (Ctrl/Command + C)")
-            pyautogui.hotkey('command', 'c')
+            pyautogui.press('left')
         elif direction == 'Right':
-            print("Trigger Paste (Command + V)")
-            pyautogui.hotkey('command', 'v')
+            pyautogui.press('right')
         elif direction == 'Up':
-            print("Trigger Highlight All (Command + A)")
-            pyautogui.hotkey('command', 'a')
+            pyautogui.press('up')
         elif direction == "Down":
-            print("Trigger Undo(Command + z)")
-            pyautogui.hotkey('command', 'z')
+            pyautogui.press('down')
         last_trigger_time = current_time
 
 
@@ -127,6 +111,7 @@ def process_frame(frame, previous_landmarks):
 
     # Detect faces in the frame using FaceDetection
     face_detection_results = face_detection.process(rgb_frame)
+    landmarks = None
 
     if face_detection_results.detections:
         for detection in face_detection_results.detections:
