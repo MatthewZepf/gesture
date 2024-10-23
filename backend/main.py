@@ -8,6 +8,9 @@ import time
 from collections import deque
 import mediapipe as mp
 import pyautogui
+import websockets
+import asyncio
+import base64
 
 # Initialize parameters
 mp_face_detection = mp.solutions.face_detection
@@ -131,7 +134,7 @@ def process_frame(frame, previous_landmarks):
     # if landmarks not none, return landmarks, otherwise return previous_landmarks
     return landmarks if landmarks else previous_landmarks
 
-def main():
+async def send_frames(websocket):
     cap = cv2.VideoCapture(0)
     previous_landmarks = None
 
@@ -147,6 +150,17 @@ def main():
             # Display the resulting frame
             cv2.imshow("Head Movement Detection", frame)
 
+            # Encode the frame as JPEG
+            _, buffer = cv2.imencode('.jpg', frame)
+            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+
+            # Send the frame over the WebSocket
+            await websocket.send(frame_base64)
+            print("Frame sent")
+            
+            # Wait for a small amount of time before sending the next frame
+            await asyncio.sleep(0.1)
+
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -155,5 +169,13 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
+async def handler(websocket, path):
+    print("Client connected")
+    await send_frames(websocket)
+
+async def main():
+    server = await websockets.serve(handler, "localhost", 8000)
+    await server.wait_closed()
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
