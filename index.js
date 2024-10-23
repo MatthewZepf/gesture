@@ -1,8 +1,10 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
+const net = require('net');
 
 let pythonProcess;
+let websocketProcess;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -23,10 +25,13 @@ function killPythonProcess() {
   if (pythonProcess) {
     pythonProcess.kill();
   }
+  if (websocketProcess) {
+    websocketProcess.kill();
+  }
 }
 
-function startPythonWebSocketServer() {
-  pythonProcess = spawn('python', [path.join(__dirname, 'backend', 'websocket_server.py')]);
+function startPythonProcess() {
+  pythonProcess = spawn('python', [path.join(__dirname, 'backend', 'main.py')]);
 
   pythonProcess.stdout.on('data', (data) => {
     console.log(`stdout: ${data}`);
@@ -42,8 +47,8 @@ function startPythonWebSocketServer() {
 }
 
 app.whenReady().then(() => {
+  startPythonProcess(); // Start the Python process before creating the window
   createWindow();
-  startPythonWebSocketServer(); // Start the WebSocket server when the app is ready
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
