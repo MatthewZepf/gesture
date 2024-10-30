@@ -148,7 +148,7 @@ async def send_frames(websocket):
             previous_landmarks = process_frame(frame, previous_landmarks)
 
             # Display the resulting frame
-            cv2.imshow("Head Movement Detection", frame)
+            # cv2.imshow("Head Movement Detection", frame)
 
             # Encode the frame as JPEG
             _, buffer = cv2.imencode('.jpg', frame)
@@ -159,7 +159,7 @@ async def send_frames(websocket):
             print("Frame sent")
             
             # Wait for a small amount of time before sending the next frame
-            await asyncio.sleep(0.1)
+            # await asyncio.sleep(0.1)
 
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
