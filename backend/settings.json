@@ -1,0 +1,16 @@
+{
+    "adv_parameters": {
+        "face_detection_confidence": 0.2,
+        "face_mesh_confidence": 0.5,
+        "face_mesh_tracking": 0.5,
+        "time_window": 0.3
+    },
+    "norm_parameters": {
+        "action_cooldown": 0.35,
+        "magnitude_threshold": 0.01,
+        "up_action": "up",
+        "down_action": "down",
+        "left_action": "left",
+        "right_action": "right"
+    }
+}

@@ -1,10 +1,9 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { spawn, exec } = require('child_process');
-const net = require('net');
+const { spawn } = require('child_process');
+const fs = require('fs');
 
 let pythonProcess;
-let websocketProcess;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -12,6 +11,8 @@ function createWindow() {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'frontend', 'preloader.js'),
+      nodeIntegration: true, // Enable Node.js integration
+      contextIsolation: false, // Disable context isolation
     },
   });
 
@@ -24,9 +25,6 @@ function createWindow() {
 function killPythonProcess() {
   if (pythonProcess) {
     pythonProcess.kill();
-  }
-  if (websocketProcess) {
-    websocketProcess.kill();
   }
 }
 
@@ -66,4 +64,15 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   killPythonProcess();
+});
+
+// Read the file and send the content to the renderer process
+ipcMain.handle('read-file', async (event, filePath) => {
+  try {
+    const data = fs.readFileSync(filePath, 'utf8');
+    return data;
+  } catch (err) {
+    console.error('Error reading file:', err);
+    throw err;
+  }
 });
