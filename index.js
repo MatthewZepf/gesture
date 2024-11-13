@@ -46,7 +46,11 @@ function startPythonProcess() {
 
 app.whenReady().then(() => {
   startPythonProcess(); // Start the Python process before creating the window
-  createWindow();
+  // wait a second or two
+  setTimeout(() => {
+    createWindow();
+  }, 2000);
+  // createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

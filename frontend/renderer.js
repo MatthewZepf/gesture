@@ -21,35 +21,6 @@ ipcRenderer.invoke('read-file', 'socket_port.txt').then((port) => {
     console.log('Disconnected from WebSocket server');
   };
 
-  document.getElementById('start').addEventListener('click', () => {
-    const message = JSON.stringify({ type: 'command', command: 'start' });
-    ws.send(message);
-    console.log('Sent start command');
-  });
-
-  document.getElementById('stop').addEventListener('click', () => {
-    const message = JSON.stringify({ type: 'command', command: 'stop' });
-    ws.send(message);
-    console.log('Sent stop command');
-  });
-
-  document.getElementById('send-settings').addEventListener('click', () => {
-    const settings = {
-      setting1: 'value1',
-      setting2: 'value2'
-    };
-    const message = JSON.stringify({ type: 'command', command: 'settings', settings: settings });
-    ws.send(message);
-    console.log('Sent settings');
-  });
-
-  document.getElementById('shutdown').addEventListener('click', () => {
-    const message = JSON.stringify({ type: 'command', command: 'shutdown' });
-    ws.send(message);
-    console.log('Sent shutdown command');
-  });
-}).catch((err) => {
-  console.error('Error reading file:', err);
 });
 
 // Create an image element in the DOM to display the frames

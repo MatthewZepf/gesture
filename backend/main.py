@@ -36,11 +36,10 @@ async def send_frames(websocket, config=config):
     cap.release()
 
 async def handle_commands(websocket):
-    global shutdown
     async for message in websocket:
         data = json.loads(message)
         if data['command'] == 'shutdown':
-            shutdown = True
+            config.shutdown = True
             break
 
 async def handler(websocket, path):
